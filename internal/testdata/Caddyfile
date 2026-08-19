@@ -1,0 +1,312 @@
+# Do not import directly, use core sso or other methods below
+# Authelia forward auth (replaces the Authentik outpost block)
+(ssoauth) {
+    forward_auth http://authelia:9091 {
+        uri /api/authz/forward-auth
+        copy_headers Remote-User Remote-Groups Remote-Name Remote-Email
+        trusted_proxies private_ranges
+    }
+}
+
+# Core SSO: Authentik → upstream
+# Usage: import sso-core <upstream>
+(sso-core) {
+    route {
+        handle {
+            import ssoauth
+            reverse_proxy {args[0]}
+        }
+    }
+}
+
+# Core SSO + fixed Basic auth upstream
+# Usage: import sso-core-basic <upstream>
+#
+# Requires:
+#   GENERIC_BASIC_AUTH = "Basic <base64(user:pass)>"
+#
+(sso-core-basic) {
+    route {
+        handle {
+            import ssoauth
+            reverse_proxy {args[0]} {
+                header_up Authorization "{env.GENERIC_BASIC_AUTH}"
+            }
+        }
+    }
+}
+
+# Bypass + SSO (no Basic)
+# Usage: import sso-bypass <upstream>
+(sso-bypass) {
+    @nzb360 header X-NZB360-Key "{env.SSO_BYPASS_KEY}"
+
+    route {
+        # 1) Bypass → straight to upstream
+        handle @nzb360 {
+            header -X-NZB360-Key
+            reverse_proxy {args[0]}
+        }
+
+        # 2) Everyone else → core SSO
+        handle {
+            import sso-core {args[0]}
+        }
+    }
+}
+
+# Bypass + SSO + Basic
+# Usage: import sso-bypass-basic <upstream>
+#
+# Same GENERIC_BASIC_AUTH env as sso-core-basic
+#
+(sso-bypass-basic) {
+    @nzb360 header X-NZB360-Key "{env.SSO_BYPASS_KEY}"
+
+    route {
+        # 1) Bypass → straight to upstream with Basic
+        handle @nzb360 {
+            header -X-NZB360-Key
+            reverse_proxy {args[0]} {
+                header_up Authorization "{env.GENERIC_BASIC_AUTH}"
+            }
+        }
+
+        # 2) Everyone else → core SSO+Basic
+        handle {
+            import sso-core-basic {args[0]}
+        }
+    }
+}
+
+# Temporary redirect: corenlabs.dev → lazurus.me
+*.corenlabs.dev, corenlabs.dev {
+    @sub {
+        not host corenlabs.dev
+    }
+    redir @sub https://{labels.2}.lazurus.me{uri} 302
+    redir https://lazurus.me 302
+
+    tls {
+        dns cloudflare {env.CF_API_TOKEN}
+    }
+}
+
+#Main (Homepage)
+lazurus.me {
+        reverse_proxy http://192.168.0.171:3030
+        tls {
+                dns cloudflare {env.CF_API_TOKEN}
+        }
+}
+
+#Audiobookshelf (no SSO supported)
+audible.lazurus.me {
+        reverse_proxy http://192.168.0.171:13378
+        tls {
+                dns cloudflare {env.CF_API_TOKEN}
+        }
+}
+#RMAB (audiobook dl'er)
+rmab.lazurus.me {
+        reverse_proxy http://192.168.0.171:3030
+        tls {
+                dns cloudflare {env.CF_API_TOKEN}
+        }
+}
+
+#Authelia
+auth.lazurus.me {
+    reverse_proxy http://authelia:9091
+    tls {
+        dns cloudflare {env.CF_API_TOKEN}
+    }
+}
+
+
+# Zipline
+zip.lazurus.me {
+        reverse_proxy http://192.168.0.171:3000
+        tls {
+                dns cloudflare {env.CF_API_TOKEN}
+        }
+}
+
+# Bazarr
+bazarr.lazurus.me {
+        reverse_proxy http://192.168.0.171:6767
+        tls {
+                dns cloudflare {env.CF_API_TOKEN}
+        }
+}
+
+# Media
+media.lazurus.me {
+        reverse_proxy http://192.168.0.171:8096
+        tls {
+                dns cloudflare {env.CF_API_TOKEN}
+        }
+}
+
+# Torrent
+torrent.lazurus.me {
+    tls {
+        dns cloudflare {env.CF_API_TOKEN}
+    }
+
+    # --- rTorrent RPC for nzb360 (no SSO, basic auth handled by rflood) ---
+ #   @rpc path /rpc2 /RPC2
+ #   handle @rpc {
+ #       # If nzb360 calls /rpc2, make sure upstream sees /RPC2
+ #       uri replace /rpc2 /RPC2
+ #       import sso-bypass-basic http://192.168.0.171:5000
+ #   }
+
+    # --- Everything else (Flood UI) behind your SSO/bypass snippet ---
+    handle {
+        import sso-bypass http://192.168.0.171:8080
+    }
+}
+# Prowlarr
+prowlarr.lazurus.me {
+        reverse_proxy http://192.168.0.171:9696
+        tls {
+                dns cloudflare {env.CF_API_TOKEN}
+        }
+}
+
+# Radarr
+radarr.lazurus.me {
+    import sso-bypass http://192.168.0.171:7878
+
+    tls {
+        dns cloudflare {env.CF_API_TOKEN}
+    }
+}
+
+# NZBget
+nzb.lazurus.me {
+        import sso-bypass-basic http://192.168.0.171:6789
+        tls {
+                dns cloudflare {env.CF_API_TOKEN}
+        }
+}
+
+# Foundry
+vtt.lazurus.me {
+        reverse_proxy http://192.168.0.171:30000
+        tls {
+                dns cloudflare {env.CF_API_TOKEN}
+        }
+}
+
+# Overseerr
+request.lazurus.me {
+        reverse_proxy http://192.168.0.171:5055
+        tls {
+                dns cloudflare {env.CF_API_TOKEN}
+        }
+}
+
+# Sonarr
+sonarr.lazurus.me {
+        import sso-bypass http://192.168.0.171:8989
+        tls {
+                dns cloudflare {env.CF_API_TOKEN}
+        }
+}
+
+# Server WebGUI
+server.lazurus.me {
+        reverse_proxy http://192.168.0.171:2319
+        tls {
+                dns cloudflare {env.CF_API_TOKEN}
+        }
+}
+
+# Webtop via Authentik
+lab.lazurus.me {
+        import sso-core http://192.168.0.171:8086
+    tls {
+        dns cloudflare {env.CF_API_TOKEN}
+    }
+}
+
+
+
+
+# Headscale
+headscale.lazurus.me {
+        reverse_proxy http://10.0.0.172:27896
+        tls {
+                dns cloudflare {env.CF_API_TOKEN}
+        }
+}
+
+#Calibre
+calibre.lazurus.me {
+    tls {
+        dns cloudflare {env.CF_API_TOKEN}
+    }
+
+    handle_path /ui/* {
+        reverse_proxy http://192.168.0.171:8280 {
+            header_up Host {upstream_hostport}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    redir /ui /ui/ 301
+
+    handle {
+        reverse_proxy http://192.168.0.171:8083
+    }
+}
+
+
+# Book Downloader
+bookdl.lazurus.me {
+        reverse_proxy http://192.168.0.171:8084
+        tls {
+                dns cloudflare {env.CF_API_TOKEN}
+        }
+}
+# Portainer
+portainer.lazurus.me {
+        reverse_proxy http://192.168.0.17:9000
+        tls {
+                dns cloudflare {env.CF_API_TOKEN}
+        }
+}
+# Profilarr
+profilarr.lazurus.me {
+        reverse_proxy http://192.168.0.171:6868
+        tls {
+                dns cloudflare {env.CF_API_TOKEN}
+        }
+}
+# Dispatcharr
+tvedit.lazurus.me {
+        reverse_proxy http://192.168.0.171:9191
+        tls {
+                dns cloudflare {env.CF_API_TOKEN}
+        }
+}
+
+#Tracearr
+trace.lazurus.me {
+        reverse_proxy http://192.168.0.171:3003
+        tls {
+                dns cloudflare {env.CF_API_TOKEN}
+        }
+}
+
+# RomM
+romm.lazurus.me {
+        reverse_proxy http://192.168.0.171:1612
+        tls {
+                dns cloudflare {env.CF_API_TOKEN}
+        }
+}
