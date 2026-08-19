@@ -51,7 +51,7 @@ on stderr and asks you to pass `-container` explicitly.
 |---|---|
 | `Ctrl+S` | Save (writes a `.bak` of the previous on-disk version first) |
 | `Ctrl+O` | Toggle the outline panel (jump to a site/snippet block) |
-| `Ctrl+N` | New-site wizard (insert a template block at the end of the file) |
+| `Ctrl+B` | New-site wizard (insert a template block at the end of the file) |
 | `Ctrl+V` | Save, then validate against the resolved target |
 | `Ctrl+R` | Reload the running Caddy instance |
 | `q` | Quit (prompts if there are unsaved changes) |

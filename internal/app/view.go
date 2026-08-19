@@ -206,7 +206,7 @@ func (m Model) renderHelp(h int) string {
 
   ^S   save (writes a .bak backup of the previous version)
   ^O   toggle outline (jump to a site/snippet block)
-  ^N   new site wizard (insert a template block)
+  ^B   new site wizard (insert a template block)
   ^V   save + validate (via docker exec / local caddy binary / bundled parser)
   ^R   reload the running Caddy instance
   q    quit (press Q to discard unsaved changes and quit)

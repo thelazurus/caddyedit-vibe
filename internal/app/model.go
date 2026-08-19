@@ -85,7 +85,7 @@ func New(hostPath string, content string, target validate.Target) Model {
 		hostPath: hostPath,
 		target:   target,
 		wizInput: ti,
-		status:   fmt.Sprintf("target: %s — ^S save  ^O outline  ^N new site  ^V validate  ^R reload  q quit", target.Description()),
+		status:   fmt.Sprintf("target: %s — ^S save  ^O outline  ^B new site  ^V validate  ^R reload  q quit", target.Description()),
 	}
 }
 
@@ -199,7 +199,7 @@ func (m Model) handleEditKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeOutline
 		m.clearStatusFlags()
 		return m, nil
-	case "ctrl+n":
+	case "ctrl+b":
 		m.mode = modeWizard
 		m.wizStep = wizStepTemplate
 		m.wizTemplateIdx = 0
