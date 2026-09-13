@@ -147,7 +147,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) setStatus(s string, isErr, isOK bool) {
-	m.status = s
+	// Command output (docker exec, caddy validate/reload) can be
+	// multi-line; the status bar is a single fixed-height line, so
+	// collapse it rather than letting it blow out the layout.
+	m.status = strings.Join(strings.Fields(s), " ")
 	m.statusIsErr = isErr
 	m.statusIsOK = isOK
 }
