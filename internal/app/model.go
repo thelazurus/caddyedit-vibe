@@ -69,10 +69,11 @@ type Model struct {
 	wizComment     string
 	wizInput       textinput.Model
 
-	status      string
-	statusIsErr bool
-	statusIsOK  bool
-	busy        bool
+	status               string
+	statusIsErr          bool
+	statusIsOK           bool
+	busy                 bool
+	pendingBackupWarning string
 
 	quitConfirm bool
 }
@@ -124,7 +125,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case validateResultMsg:
 		m.busy = false
-		m.setStatus(fmt.Sprintf("[validate: %s] %s", msg.res.Source, msg.res.Message), !msg.res.OK, msg.res.OK)
+		prefix := ""
+		isErr := !msg.res.OK
+		if m.pendingBackupWarning != "" {
+			prefix = "[no backup: " + m.pendingBackupWarning + "] "
+			isErr = true
+			m.pendingBackupWarning = ""
+		}
+		m.setStatus(prefix+fmt.Sprintf("[validate: %s] %s", msg.res.Source, msg.res.Message), isErr, msg.res.OK && prefix == "")
 		return m, nil
 
 	case reloadResultMsg:
@@ -183,9 +191,13 @@ func (m Model) handleEditKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "Q":
 		return m, tea.Quit
 	case "ctrl+s":
-		if err := m.save(); err != nil {
+		backupWarning, err := m.save()
+		switch {
+		case err != nil:
 			m.setStatus("save failed: "+err.Error(), true, false)
-		} else {
+		case backupWarning != "":
+			m.setStatus("saved (no backup: "+backupWarning+")", true, false)
+		default:
 			m.setStatus("saved "+m.hostPath, false, true)
 		}
 		return m, nil
@@ -207,10 +219,12 @@ func (m Model) handleEditKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.clearStatusFlags()
 		return m, nil
 	case "ctrl+v":
-		if err := m.save(); err != nil {
+		backupWarning, err := m.save()
+		if err != nil {
 			m.setStatus("save failed: "+err.Error(), true, false)
 			return m, nil
 		}
+		m.pendingBackupWarning = backupWarning
 		m.busy = true
 		m.setStatus("validating via "+m.target.Description()+"...", false, false)
 		return m, m.doValidate()
@@ -378,16 +392,22 @@ func (m *Model) insertBlockAtEnd(lines []string) {
 	m.scrollToCursor()
 }
 
-func (m *Model) save() error {
+// save writes the buffer to hostPath. It returns a backup warning
+// (non-fatal: the backup couldn't be written, e.g. no write permission on
+// the containing directory even though the file itself is writable) and/or
+// a fatal error from the main write.
+func (m *Model) save() (backupWarning string, err error) {
 	content := m.buf.String()
-	if existing, err := os.ReadFile(m.hostPath); err == nil {
-		_ = os.WriteFile(m.hostPath+".bak", existing, 0644)
+	if existing, rerr := os.ReadFile(m.hostPath); rerr == nil {
+		if werr := os.WriteFile(m.hostPath+".bak", existing, 0644); werr != nil {
+			backupWarning = "backup NOT written: " + werr.Error()
+		}
 	}
-	if err := os.WriteFile(m.hostPath, []byte(content), 0644); err != nil {
-		return err
+	if werr := os.WriteFile(m.hostPath, []byte(content), 0644); werr != nil {
+		return backupWarning, werr
 	}
 	m.buf.Dirty = false
-	return nil
+	return backupWarning, nil
 }
 
 func (m *Model) viewportHeight() int {
